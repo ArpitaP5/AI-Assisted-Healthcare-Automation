@@ -1,0 +1,303 @@
+
+<div class="app-container">
+  <header class="header">
+    <div>
+      <h1>💊 {{ appName }}</h1>
+      <p>{{ subtitle }}</p>
+    </div>
+    <span class="status">● Personal Tracker</span>
+  </header>
+
+  <main>
+    <section class="welcome">
+      <h2>Your medicine schedule</h2>
+      <p>
+        Keep track of medicines prescribed by your healthcare professional.
+      </p>
+    </section>
+
+    <section class="form-section">
+      <h2>🔔 Browser Notifications</h2>
+      <p>
+        Permission status:
+        <strong>{{ notificationPermission }}</strong>
+      </p>
+      <p>
+        Keep this page open to receive scheduled browser reminders.
+      </p>
+
+      <button
+        type="button"
+        (click)="requestNotificationPermission()"
+        [disabled]="notificationPermission === 'granted'"
+      >
+        {{
+          notificationPermission === 'granted'
+            ? 'Notifications Enabled'
+            : 'Enable Notifications'
+        }}
+      </button>
+    </section>
+
+    <section class="summary">
+      <div class="summary-card">
+        <h3>Total Medicines</h3>
+        <p class="number">{{ medicines.length }}</p>
+      </div>
+
+      <div class="summary-card">
+        <h3>Active Schedules</h3>
+        <p class="number">{{ activeMedicineCount }}</p>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h2>
+        {{ editingId !== null ? '✏️ Edit Medicine' : '➕ Add Medicine' }}
+      </h2>
+
+      <form (ngSubmit)="saveMedicine()" #medicineForm="ngForm">
+        <div class="form-group">
+          <label for="name">Medicine Name *</label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            [(ngModel)]="newMedicine.name"
+            placeholder="Enter medicine name"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="dosage">Dosage *</label>
+          <input
+            id="dosage"
+            name="dosage"
+            type="text"
+            [(ngModel)]="newMedicine.dosage"
+            placeholder="As prescribed"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="start_date">Start Date *</label>
+          <input
+            id="start_date"
+            name="start_date"
+            type="date"
+            [(ngModel)]="newMedicine.start_date"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="end_date">End Date (optional)</label>
+          <input
+            id="end_date"
+            name="end_date"
+            type="date"
+            [(ngModel)]="newMedicine.end_date"
+          />
+        </div>
+
+        <button
+          type="submit"
+          [disabled]="saving || medicineForm.invalid"
+        >
+          {{
+            saving
+              ? 'Saving...'
+              : editingId !== null
+                ? 'Save Changes'
+                : 'Add Medicine'
+          }}
+        </button>
+
+        <button
+          *ngIf="editingId !== null"
+          type="button"
+          (click)="cancelEdit()"
+          [disabled]="saving"
+        >
+          Cancel
+        </button>
+      </form>
+    </section>
+
+    <p *ngIf="successMessage" class="success-message" role="status">
+      {{ successMessage }}
+    </p>
+
+    <p *ngIf="errorMessage" class="error-message" role="alert">
+      {{ errorMessage }}
+    </p>
+
+    <section class="medicine-section">
+      <h2>Medicine List</h2>
+
+      <div class="search-filter">
+        <div class="form-group">
+          <label for="search">Search by medicine name</label>
+          <input
+            id="search"
+            name="search"
+            type="search"
+            [(ngModel)]="searchTerm"
+            placeholder="Type a medicine name..."
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="statusFilter">Filter by status</label>
+          <select
+            id="statusFilter"
+            name="statusFilter"
+            [(ngModel)]="statusFilter"
+          >
+            <option value="all">All schedules</option>
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+          </select>
+        </div>
+      </div>
+
+      <p *ngIf="loading">Loading medicines...</p>
+
+      <div
+        *ngIf="!loading && !errorMessage && filteredMedicines.length === 0"
+        class="empty-state"
+      >
+        <p>No matching medicines found.</p>
+      </div>
+
+      <div
+        *ngFor="let medicine of filteredMedicines"
+        class="medicine-card"
+      >
+        <div>
+          <h3>{{ medicine.name }}</h3>
+          <p>Dosage: {{ medicine.dosage }}</p>
+          <p>Start date: {{ medicine.start_date }}</p>
+          <p>
+            End date: {{ medicine.end_date || 'Not specified' }}
+          </p>
+        </div>
+
+        <div class="medicine-actions">
+          <span
+            class="badge"
+            [class.active]="medicine.is_active"
+          >
+            {{ medicine.is_active ? 'Active' : 'Inactive' }}
+          </span>
+
+          <button
+            type="button"
+            (click)="editMedicine(medicine)"
+            [disabled]="saving"
+          >
+            Edit
+          </button>
+
+          <button
+            type="button"
+            class="delete-button"
+            (click)="deleteMedicine(medicine.id)"
+            [disabled]="saving"
+          >
+            Delete
+          </button>
+        </div>
+
+        <div class="reminder-section">
+          <h4>⏰ Daily Reminder Times</h4>
+
+          <p *ngIf="reminderLoading[medicine.id]">
+            Loading reminder times...
+          </p>
+
+          <p
+            *ngIf="
+              !reminderLoading[medicine.id] &&
+              (remindersByMedicine[medicine.id] || []).length === 0
+            "
+          >
+            No reminder times added yet.
+          </p>
+
+          <div
+            *ngFor="
+              let reminder of remindersByMedicine[medicine.id] || []
+            "
+            class="reminder-item"
+          >
+            <span class="reminder-time">
+              {{ reminder.reminder_time.slice(0, 5) }}
+            </span>
+
+            <span
+              class="reminder-status"
+              [class.disabled-reminder]="!reminder.is_enabled"
+            >
+              {{ reminder.is_enabled ? 'Enabled' : 'Disabled' }}
+            </span>
+
+            <button
+              type="button"
+              (click)="toggleReminder(reminder)"
+            >
+              {{ reminder.is_enabled ? 'Disable' : 'Enable' }}
+            </button>
+
+            <button
+              type="button"
+              class="delete-button"
+              (click)="deleteReminder(reminder)"
+            >
+              Delete
+            </button>
+          </div>
+
+          <form
+            class="add-reminder-form"
+            (ngSubmit)="addReminder(medicine.id)"
+          >
+            <div class="form-group">
+              <label [for]="'reminder-' + medicine.id">
+                Add a reminder time
+              </label>
+
+              <input
+                [id]="'reminder-' + medicine.id"
+                [name]="'reminder-' + medicine.id"
+                type="time"
+                [(ngModel)]="reminderTimes[medicine.id]"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              [disabled]="
+                !reminderTimes[medicine.id] ||
+                reminderSaving[medicine.id]
+              "
+            >
+              {{
+                reminderSaving[medicine.id]
+                  ? 'Adding...'
+                  : '+ Add Time'
+              }}
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Medicine Reminder · Track your prescribed medicine schedule
+  </footer>
+</div>
